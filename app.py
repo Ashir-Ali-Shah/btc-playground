@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import yfinance as yf
 import numpy as np
+import plotly.graph_objs as go
 
 # Fetch BTC historical data using yfinance
 btc_data = yf.download('BTC-USD', start='2020-01-01', end='2024-07-01')
@@ -159,7 +159,7 @@ st.sidebar.title('Buy Conditions')
 buy_conditions = {}
 buy_values = {}
 for indicator in ['RSI', 'STOCH_K', 'CCI', 'ADX', 'MOM', 'MACD', 'STOCHRSI_K', 'WILLR', 'AO', 'Bull_Bear_Power', 'Ultimate_Oscillator', 'Ichimoku_Base_Line', 'VWMA', 'HMA']:
-    if st.sidebar.checkbox('Buy ' + indicator, key='buy_' + indicator):  # Ensuring unique key by prepending "buy_"
+    if st.sidebar.checkbox(indicator, key='buy_' + indicator):  # Ensuring unique key by prepending "buy_"
         buy_conditions[indicator] = st.sidebar.selectbox(f"Buy if {indicator}", ["greater than", "less than"], key=f"buy_cond_{indicator}")
         buy_values[indicator] = st.sidebar.number_input(f"Value for {indicator}", value=0, key=f"buy_value_{indicator}")
 
@@ -167,7 +167,7 @@ st.sidebar.title('Sell Conditions')
 sell_conditions = {}
 sell_values = {}
 for indicator in ['RSI', 'STOCH_K', 'CCI', 'ADX', 'MOM', 'MACD', 'STOCHRSI_K', 'WILLR', 'AO', 'Bull_Bear_Power', 'Ultimate_Oscillator', 'Ichimoku_Base_Line', 'VWMA', 'HMA']:
-    if st.sidebar.checkbox('Sell ' + indicator, key='sell_' + indicator):  # Ensuring unique key by prepending "sell_"
+    if st.sidebar.checkbox(indicator, key='sell_' + indicator):  # Ensuring unique key by prepending "sell_"
         sell_conditions[indicator] = st.sidebar.selectbox(f"Sell if {indicator}", ["greater than", "less than"], key=f"sell_cond_{indicator}")
         sell_values[indicator] = st.sidebar.number_input(f"Value for {indicator}", value=0, key=f"sell_value_{indicator}")
 
@@ -194,21 +194,23 @@ def determine_signals(data, buy_conditions, buy_values, sell_conditions, sell_va
 # Apply conditions and plot data
 btc_data = determine_signals(btc_data, buy_conditions, buy_values, sell_conditions, sell_values)
 
-# Setting up dark background style for matplotlib
-plt.style.use('dark_background')
+# Sidebar slider for date range selection
+start_date = st.sidebar.date_input('Start date', btc_data['Date'].min())
+end_date = st.sidebar.date_input('End date', btc_data['Date'].max())
 
-# Plotting function with dark background
+# Filter data based on date range selection
+filtered_data = btc_data[(btc_data['Date'] >= pd.to_datetime(start_date)) & (btc_data['Date'] <= pd.to_datetime(end_date))]
+
+# Plotting function with Plotly
 def plot_data(data):
-    plt.figure(figsize=(12, 6))
-    plt.plot(data['Date'], data['Close'], label='Price', color='white')  # Adjust line color for visibility
-    plt.scatter(data['Date'], data['Buy'], color='green', label='Buy Signal', marker='^', alpha=1)
-    plt.scatter(data['Date'], data['Sell'], color='red', label='Sell Signal', marker='v', alpha=1)
-    plt.xlabel('Date', color='white')  # Adjust label color
-    plt.ylabel('Price', color='white')
-    plt.title('BTC Price with Buy/Sell Signals', color='white')
-    plt.legend()
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5, color='grey')  # Adjust grid color and style for visibility
-    st.pyplot(plt)
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=data['Date'], y=data['Close'], mode='lines', name='Price'))
+    if not data['Buy'].isna().all():
+        fig.add_trace(go.Scatter(x=data['Date'], y=data['Buy'], mode='markers', marker=dict(color='green', symbol='triangle-up'), name='Buy Signal'))
+    if not data['Sell'].isna().all():
+        fig.add_trace(go.Scatter(x=data['Date'], y=data['Sell'], mode='markers', marker=dict(color='red', symbol='triangle-down'), name='Sell Signal'))
+    fig.update_layout(title='BTC Price with Buy/Sell Signals', xaxis_title='Date', yaxis_title='Price')
+    st.plotly_chart(fig)
 
 # Display the plot in Streamlit
-plot_data(btc_data)
+plot_data(filtered_data)
