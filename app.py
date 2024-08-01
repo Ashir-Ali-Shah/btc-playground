@@ -158,41 +158,47 @@ st.title('BTC Trading Strategy Playground')
 st.sidebar.title('Buy Conditions')
 buy_conditions = {}
 buy_values = {}
+buy_leverage = {}
 for indicator in ['RSI', 'STOCH_K', 'CCI', 'ADX', 'MOM', 'MACD', 'STOCHRSI_K', 'WILLR', 'AO', 'Bull_Bear_Power', 'Ultimate_Oscillator', 'Ichimoku_Base_Line', 'VWMA', 'HMA']:
     if st.sidebar.checkbox(indicator, key='buy_' + indicator):  # Ensuring unique key by prepending "buy_"
         buy_conditions[indicator] = st.sidebar.selectbox(f"Buy if {indicator}", ["greater than", "less than"], key=f"buy_cond_{indicator}")
         buy_values[indicator] = st.sidebar.number_input(f"Value for {indicator}", value=0, key=f"buy_value_{indicator}")
+        buy_leverage[indicator] = st.sidebar.number_input(f"Leverage for {indicator}", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key=f"buy_leverage_{indicator}")
 
 st.sidebar.title('Sell Conditions')
 sell_conditions = {}
 sell_values = {}
+sell_leverage = {}
 for indicator in ['RSI', 'STOCH_K', 'CCI', 'ADX', 'MOM', 'MACD', 'STOCHRSI_K', 'WILLR', 'AO', 'Bull_Bear_Power', 'Ultimate_Oscillator', 'Ichimoku_Base_Line', 'VWMA', 'HMA']:
     if st.sidebar.checkbox(indicator, key='sell_' + indicator):  # Ensuring unique key by prepending "sell_"
         sell_conditions[indicator] = st.sidebar.selectbox(f"Sell if {indicator}", ["greater than", "less than"], key=f"sell_cond_{indicator}")
         sell_values[indicator] = st.sidebar.number_input(f"Value for {indicator}", value=0, key=f"sell_value_{indicator}")
+        sell_leverage[indicator] = st.sidebar.number_input(f"Leverage for {indicator}", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key=f"sell_leverage_{indicator}")
 
 # Determine Buy/Sell signals
-def determine_signals(data, buy_conditions, buy_values, sell_conditions, sell_values):
+def determine_signals(data, buy_conditions, buy_values, buy_leverage, sell_conditions, sell_values, sell_leverage):
     data['Buy'] = np.nan
     data['Sell'] = np.nan
     for indicator in buy_conditions:
         condition = buy_conditions[indicator]
         value = buy_values[indicator]
+        leverage = buy_leverage[indicator]
         if condition == "greater than":
-            data.loc[data[indicator] > value, 'Buy'] = data['Close']
+            data.loc[data[indicator] > value, 'Buy'] = data['Close'] * leverage
         elif condition == "less than":
-            data.loc[data[indicator] < value, 'Buy'] = data['Close']
+            data.loc[data[indicator] < value, 'Buy'] = data['Close'] * leverage
     for indicator in sell_conditions:
         condition = sell_conditions[indicator]
         value = sell_values[indicator]
+        leverage = sell_leverage[indicator]
         if condition == "greater than":
-            data.loc[data[indicator] > value, 'Sell'] = data['Close']
+            data.loc[data[indicator] > value, 'Sell'] = data['Close'] * leverage
         elif condition == "less than":
-            data.loc[data[indicator] < value, 'Sell'] = data['Close']
+            data.loc[data[indicator] < value, 'Sell'] = data['Close'] * leverage
     return data
 
 # Apply conditions and plot data
-btc_data = determine_signals(btc_data, buy_conditions, buy_values, sell_conditions, sell_values)
+btc_data = determine_signals(btc_data, buy_conditions, buy_values, buy_leverage, sell_conditions, sell_values, sell_leverage)
 
 # Sidebar slider for date range selection
 start_date = st.sidebar.date_input('Start date', btc_data['Date'].min())
@@ -200,6 +206,25 @@ end_date = st.sidebar.date_input('End date', btc_data['Date'].max())
 
 # Filter data based on date range selection
 filtered_data = btc_data[(btc_data['Date'] >= pd.to_datetime(start_date)) & (btc_data['Date'] <= pd.to_datetime(end_date))]
+
+# Calculate portfolio performance
+initial_portfolio = 100000
+portfolio = initial_portfolio
+btc_held = 0
+
+for i in range(len(filtered_data)):
+    if not pd.isna(filtered_data.iloc[i]['Buy']):
+        btc_held += filtered_data.iloc[i]['Buy'] / filtered_data.iloc[i]['Close']
+        portfolio -= filtered_data.iloc[i]['Buy']
+    if not pd.isna(filtered_data.iloc[i]['Sell']) and btc_held > 0:
+        portfolio += btc_held * filtered_data.iloc[i]['Sell']
+        btc_held = 0
+
+final_portfolio_value = portfolio + btc_held * filtered_data.iloc[-1]['Close']
+profit_loss = final_portfolio_value - initial_portfolio
+
+st.write(f"Final Portfolio Value: ${final_portfolio_value:,.2f}")
+st.write(f"Profit/Loss: ${profit_loss:,.2f}")
 
 # Plotting function with Plotly
 def plot_data(data):
