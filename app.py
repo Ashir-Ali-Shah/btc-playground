@@ -45,10 +45,9 @@ def calculate_adx(data, window):
     low_diff = data['Low'].diff()
     plus_dm = np.where((high_diff > low_diff) & (high_diff > 0), high_diff, 0)
     minus_dm = np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0)
-    tr1 = pd.DataFrame(data['High'] - data['Low'])
-    tr2 = pd.DataFrame(abs(data['High'] - data['Close'].shift(1)))
-    tr3 = pd.DataFrame(abs(data['Low'] - data['Close'].shift(1)))
-    tr = pd.concat([tr1, tr2, tr3], axis=1, join='inner').max(axis=1)
+    tr = pd.concat([data['High'] - data['Low'], 
+                    (data['High'] - data['Close'].shift(1)).abs(), 
+                    (data['Low'] - data['Close'].shift(1)).abs()], axis=1).max(axis=1)
     atr = tr.rolling(window=window).mean()
     plus_di = 100 * (pd.Series(plus_dm).rolling(window=window).mean() / atr)
     minus_di = 100 * (pd.Series(minus_dm).rolling(window=window).mean() / atr)
@@ -57,8 +56,7 @@ def calculate_adx(data, window):
     return adx
 
 def calculate_momentum(data, window):
-    momentum = data['Close'].diff(window)
-    return momentum
+    return data['Close'].diff(window)
 
 def calculate_macd(data, fast, slow, signal):
     fast_ema = data['Close'].ewm(span=fast, min_periods=1).mean()
@@ -123,12 +121,10 @@ def calculate_stoch_rsi_fast(data, rsi_window, k_window, d_window):
     return stoch_rsi_k * 100, stoch_rsi_d * 100
 
 def calculate_ema(data, window):
-    ema = data['Close'].ewm(span=window, adjust=False).mean()
-    return ema
+    return data['Close'].ewm(span=window, adjust=False).mean()
 
 def calculate_sma(data, window):
-    sma = data['Close'].rolling(window=window).mean()
-    return sma
+    return data['Close'].rolling(window=window).mean()
 
 # Calculate indicators
 btc_data['RSI'] = calculate_rsi(btc_data, window=14)
@@ -175,6 +171,10 @@ for indicator in ['RSI', 'STOCH_K', 'CCI', 'ADX', 'MOM', 'MACD', 'STOCHRSI_K', '
         sell_values[indicator] = st.sidebar.number_input(f"Value for {indicator}", value=0, key=f"sell_value_{indicator}")
         sell_leverage[indicator] = st.sidebar.number_input(f"Leverage for {indicator}", min_value=0.0, max_value=1.0, value=0.1, step=0.1, key=f"sell_leverage_{indicator}")
 
+# Sidebar slider for date range selection
+start_date = st.sidebar.date_input('Start date', btc_data['Date'].min())
+end_date = st.sidebar.date_input('End date', btc_data['Date'].max())
+
 # Determine Buy/Sell signals
 def determine_signals(data, buy_conditions, buy_values, buy_leverage, sell_conditions, sell_values, sell_leverage):
     data['Buy'] = np.nan
@@ -200,10 +200,6 @@ def determine_signals(data, buy_conditions, buy_values, buy_leverage, sell_condi
 # Apply conditions and plot data
 btc_data = determine_signals(btc_data, buy_conditions, buy_values, buy_leverage, sell_conditions, sell_values, sell_leverage)
 
-# Sidebar slider for date range selection
-start_date = st.sidebar.date_input('Start date', btc_data['Date'].min())
-end_date = st.sidebar.date_input('End date', btc_data['Date'].max())
-
 # Filter data based on date range selection
 filtered_data = btc_data[(btc_data['Date'] >= pd.to_datetime(start_date)) & (btc_data['Date'] <= pd.to_datetime(end_date))]
 
@@ -212,12 +208,17 @@ initial_portfolio = 100000
 portfolio = initial_portfolio
 btc_held = 0
 
+# Record trades for analysis
+trades = []
+
 for i in range(len(filtered_data)):
     if not pd.isna(filtered_data.iloc[i]['Buy']):
         btc_held += filtered_data.iloc[i]['Buy'] / filtered_data.iloc[i]['Close']
         portfolio -= filtered_data.iloc[i]['Buy']
+        trades.append(('Buy', filtered_data.iloc[i]['Date'], filtered_data.iloc[i]['Buy'], filtered_data.iloc[i]['Close']))
     if not pd.isna(filtered_data.iloc[i]['Sell']) and btc_held > 0:
         portfolio += btc_held * filtered_data.iloc[i]['Sell']
+        trades.append(('Sell', filtered_data.iloc[i]['Date'], btc_held * filtered_data.iloc[i]['Sell'], filtered_data.iloc[i]['Close']))
         btc_held = 0
 
 final_portfolio_value = portfolio + btc_held * filtered_data.iloc[-1]['Close']
@@ -225,6 +226,11 @@ profit_loss = final_portfolio_value - initial_portfolio
 
 st.write(f"Final Portfolio Value: ${final_portfolio_value:,.2f}")
 st.write(f"Profit/Loss: ${profit_loss:,.2f}")
+
+# Display trades
+st.write("Trades:")
+trade_df = pd.DataFrame(trades, columns=['Action', 'Date', 'Amount', 'Price'])
+st.dataframe(trade_df)
 
 # Plotting function with Plotly
 def plot_data(data):
