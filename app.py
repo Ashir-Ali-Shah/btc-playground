@@ -240,17 +240,40 @@ simulation_results.append([filtered_data.iloc[-1]['Date'], final_close_price, fi
 # Convert results to a DataFrame for display
 simulation_df = pd.DataFrame(simulation_results, columns=['Date', 'Price', 'Portfolio Value', 'BTC Held', 'Total Position Value'])
 
-# Display the DataFrame in Streamlit
-st.dataframe(simulation_df)
+# Add a summary section
+st.subheader('Portfolio Summary')
+st.markdown(f"**Initial Portfolio Value:** ${initial_portfolio:,.2f}")
+st.markdown(f"**Final Portfolio Value:** ${final_portfolio_value:,.2f}")
+st.markdown(f"**Profit/Loss:** ${final_portfolio_value - initial_portfolio:,.2f}")
+
+# Apply conditional formatting to the DataFrame
+def highlight_positive(val):
+    color = 'green' if val > 0 else 'red'
+    return f'color: {color}'
+
+styled_df = simulation_df.style.applymap(highlight_positive, subset=['Portfolio Value', 'Total Position Value'])
+styled_df = styled_df.format({'Price': '${:,.2f}', 'Portfolio Value': '${:,.2f}', 'BTC Held': '{:.6f}', 'Total Position Value': '${:,.2f}'})
+
+# Display the styled DataFrame
+st.dataframe(styled_df)
 
 # Plotting function with Plotly
 def plot_data(data):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data['Date'], y=data['Close'], mode='lines', name='Price'))
+    
+    # Buy signals are plotted with green upward triangles
     if not data['Buy'].isna().all():
-        fig.add_trace(go.Scatter(x=data['Date'], y=data['Buy'], mode='markers', marker=dict(color='green', symbol='triangle-up'), name='Buy Signal'))
+        fig.add_trace(go.Scatter(x=data['Date'], y=data['Buy'], mode='markers', 
+                                 marker=dict(color='green', symbol='triangle-up'), 
+                                 name='Buy Signal'))
+    
+    # Sell signals are plotted with red downward triangles
     if not data['Sell'].isna().all():
-        fig.add_trace(go.Scatter(x=data['Date'], y=data['Sell'], mode='markers', marker=dict(color='red', symbol='triangle-down'), name='Sell Signal'))
+        fig.add_trace(go.Scatter(x=data['Date'], y=data['Sell'], mode='markers', 
+                                 marker=dict(color='red', symbol='triangle-down'), 
+                                 name='Sell Signal'))
+    
     fig.update_layout(title='BTC Price with Buy/Sell Signals', xaxis_title='Date', yaxis_title='Price')
     st.plotly_chart(fig)
 
