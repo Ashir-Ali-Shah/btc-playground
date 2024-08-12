@@ -182,19 +182,17 @@ def determine_signals(data, buy_conditions, buy_values, buy_leverage, sell_condi
     for indicator in buy_conditions:
         condition = buy_conditions[indicator]
         value = buy_values[indicator]
-        leverage = buy_leverage[indicator]
         if condition == "greater than":
-            data.loc[data[indicator] > value, 'Buy'] = data['Close'] * leverage
+            data.loc[data[indicator] > value, 'Buy'] = data['Close']  # Plot at the actual close price
         elif condition == "less than":
-            data.loc[data[indicator] < value, 'Buy'] = data['Close'] * leverage
+            data.loc[data[indicator] < value, 'Buy'] = data['Close']  # Plot at the actual close price
     for indicator in sell_conditions:
         condition = sell_conditions[indicator]
         value = sell_values[indicator]
-        leverage = sell_leverage[indicator]
         if condition == "greater than":
-            data.loc[data[indicator] > value, 'Sell'] = data['Close'] * leverage
+            data.loc[data[indicator] > value, 'Sell'] = data['Close']  # Plot at the actual close price
         elif condition == "less than":
-            data.loc[data[indicator] < value, 'Sell'] = data['Close'] * leverage
+            data.loc[data[indicator] < value, 'Sell'] = data['Close']  # Plot at the actual close price
     return data
 
 # Apply conditions and plot data
@@ -203,34 +201,47 @@ btc_data = determine_signals(btc_data, buy_conditions, buy_values, buy_leverage,
 # Filter data based on date range selection
 filtered_data = btc_data[(btc_data['Date'] >= pd.to_datetime(start_date)) & (btc_data['Date'] <= pd.to_datetime(end_date))]
 
-# Calculate portfolio performance
+# Initialize variables for simulation
 initial_portfolio = 100000
 portfolio = initial_portfolio
 btc_held = 0
 
-# Record trades for analysis
-trades = []
+# Prepare a list to hold the detailed results for each step
+simulation_results = []
 
+# Simulate the portfolio over the filtered data
 for i in range(len(filtered_data)):
-    if not pd.isna(filtered_data.iloc[i]['Buy']):
-        btc_held += filtered_data.iloc[i]['Buy'] / filtered_data.iloc[i]['Close']
-        portfolio -= filtered_data.iloc[i]['Buy']
-        trades.append(('Buy', filtered_data.iloc[i]['Date'], filtered_data.iloc[i]['Buy'], filtered_data.iloc[i]['Close']))
-    if not pd.isna(filtered_data.iloc[i]['Sell']) and btc_held > 0:
-        portfolio += btc_held * filtered_data.iloc[i]['Sell']
-        trades.append(('Sell', filtered_data.iloc[i]['Date'], btc_held * filtered_data.iloc[i]['Sell'], filtered_data.iloc[i]['Close']))
+    date = filtered_data.iloc[i]['Date']
+    close_price = filtered_data.iloc[i]['Close']
+    buy_signal = filtered_data.iloc[i]['Buy']
+    sell_signal = filtered_data.iloc[i]['Sell']
+    
+    if not pd.isna(buy_signal):
+        btc_bought = buy_signal / close_price
+        btc_held += btc_bought
+        portfolio -= buy_signal
+        total_position_value = btc_held * close_price
+        simulation_results.append([date, close_price, portfolio, btc_held, total_position_value])
+    
+    if not pd.isna(sell_signal) and btc_held > 0:
+        portfolio += btc_held * close_price
         btc_held = 0
+        total_position_value = 0
+        simulation_results.append([date, close_price, portfolio, btc_held, total_position_value])
 
-final_portfolio_value = portfolio + btc_held * filtered_data.iloc[-1]['Close']
-profit_loss = final_portfolio_value - initial_portfolio
+# Final portfolio value after the last data point
+final_close_price = filtered_data.iloc[-1]['Close']
+total_position_value = btc_held * final_close_price
+final_portfolio_value = portfolio + total_position_value
 
-st.write(f"Final Portfolio Value: ${final_portfolio_value:,.2f}")
-st.write(f"Profit/Loss: ${profit_loss:,.2f}")
+# Add final state to the simulation results
+simulation_results.append([filtered_data.iloc[-1]['Date'], final_close_price, final_portfolio_value, btc_held, total_position_value])
 
-# Display trades
-st.write("Trades:")
-trade_df = pd.DataFrame(trades, columns=['Action', 'Date', 'Amount', 'Price'])
-st.dataframe(trade_df)
+# Convert results to a DataFrame for display
+simulation_df = pd.DataFrame(simulation_results, columns=['Date', 'Price', 'Portfolio Value', 'BTC Held', 'Total Position Value'])
+
+# Display the DataFrame in Streamlit
+st.dataframe(simulation_df)
 
 # Plotting function with Plotly
 def plot_data(data):
